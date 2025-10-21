@@ -44,11 +44,30 @@
     "load-grunt-tasks": "^5.1.0",
     "mocha": "^11.7.4",
     "mustache": "^4.2.0",
-    "time-grunt": "^2.0.0",
-    "nth-check": "^2.1.1"
+    "nth-check": "^2.1.1",
+    "nyc": "^17.1.0",
+    "time-grunt": "^2.0.0"
   },
   "scripts": {
-    "test": "mocha"
+    "test": "mocha",
+    "test:coverage": "nyc mocha",
+    "test:coverage:report": "nyc report --reporter=text-lcov"
+  },
+  "nyc": {
+    "reporter": [
+      "text",
+      "lcov",
+      "html"
+    ],
+    "exclude": [
+      "test/**",
+      "node_modules/**"
+    ],
+    "check-coverage": true,
+    "lines": 95,
+    "statements": 95,
+    "functions": 100,
+    "branches": 70
   },
   "overrides": {}
 }

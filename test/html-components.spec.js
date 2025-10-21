@@ -318,6 +318,78 @@ describe("callbacks", function () {
   });
 });
 
+describe("CDATA handling", function () {
+  it("Should process CDATA in script tags", function () {
+    const html = `
+      <html>
+      <head><title>test</title></head>
+      <body>
+        <script type="text/html">
+        <![CDATA[
+          <comp1 attr1="test"><_attr2>content</_attr2></comp1>
+        ]]>
+        </script>
+      </body>
+      </html>
+    `;
+
+    const newHTML = htmlComponents.processHTML(html);
+
+    // CDATA should be preserved and content should be processed
+    assert(newHTML.includes("<![CDATA["), "CDATA opening should be present");
+    assert(newHTML.includes("]]>"), "CDATA closing should be present");
+    assert(newHTML.includes('<div class="comp1">'), "Component should be processed inside CDATA");
+    assert(!newHTML.includes("<comp1"), "Original component tag should not be present");
+  });
+
+  it("Should process non-CDATA script tags with text/html type", function () {
+    const html = `
+      <html>
+      <body>
+        <script type="text/html">
+          <comp1 attr1="without-cdata"></comp1>
+        </script>
+      </body>
+      </html>
+    `;
+
+    const newHTML = htmlComponents.processHTML(html);
+
+    // Component should be processed even without CDATA
+    assert(newHTML.includes('<div class="comp1">'), "Component should be processed");
+    assert(newHTML.includes('without-cdata'), "Attribute value should be present");
+    assert(!newHTML.includes("<comp1"), "Original component tag should not be present");
+  });
+});
+
+describe("Cache management", function () {
+  it("Should cache templates", function () {
+    const template1 = htmlComponents.getTemplate("comp1");
+    const template2 = htmlComponents.getTemplate("comp1");
+
+    // Same template should be returned from cache
+    assert.strictEqual(template1, template2, "Templates should be cached");
+  });
+
+  it("Should reset cache when resetCache is called", function () {
+    // Get a template to populate cache
+    const template1 = htmlComponents.getTemplate("comp1");
+    assert(Object.keys(htmlComponents.cache).length > 0, "Cache should not be empty");
+
+    // Reset cache
+    const result = htmlComponents.resetCache();
+
+    // Cache should be empty
+    assert.strictEqual(Object.keys(htmlComponents.cache).length, 0, "Cache should be empty after reset");
+
+    // Should return this for chaining
+    assert.strictEqual(result, htmlComponents, "resetCache should return this");
+
+    // Re-populate cache
+    htmlComponents.getTemplate("comp1");
+  });
+});
+
 /*
 describe("bugs", function() {
     it.only("Should not render multiple <br>", function() {

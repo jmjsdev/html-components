@@ -1,7 +1,10 @@
 /*global describe,it*/
 "use strict";
 var assert = require("assert"),
-  cheerio = require("cheerio"),
+  { parseDocument } = require("htmlparser2"),
+  { selectAll, selectOne } = require("css-select"),
+  render = require("dom-serializer").default,
+  { textContent } = require("domutils"),
   fs = require("fs.extra"),
   glob = require("glob-all"),
   path = require("path"),
@@ -14,6 +17,32 @@ var componentsFolder = "test/resources/components-folder";
 var htmlComponents = new HTMLComponents({
   componentsFolder: componentsFolder,
 });
+
+// Helper function to get attributes from a node
+function getAttributes(node) {
+  return node.attribs || {};
+}
+
+// Helper function to load HTML and select elements
+function loadHTML(html, options = {}) {
+  const dom = parseDocument(html, {
+    xmlMode: options.xmlMode || false,
+    decodeEntities: false,
+    lowerCaseTags: false,
+    lowerCaseAttributeNames: false,
+  });
+  return {
+    dom: dom,
+    select: (selector) => {
+      const nodes = selectAll(selector, dom);
+      return {
+        eq: (index) => nodes[index],
+        length: nodes.length,
+        text: () => (nodes[0] ? textContent(nodes[0]) : ""),
+      };
+    },
+  };
+}
 
 describe("Tags", function () {
   it("should correctly list the tags in components folder", function () {
@@ -41,15 +70,18 @@ describe("Tags", function () {
 describe("Attributes", function () {
   var testNodeAttr = '<node attr1="value1" attr2="value2"></node>';
   it("should return object from attributes", function () {
-    var attrObj = htmlComponents.processAttributes(cheerio.load(testNodeAttr)("node").eq(0));
+    const { dom } = loadHTML(testNodeAttr);
+    const node = selectOne("node", dom);
+    var attrObj = htmlComponents.processAttributes(node, dom);
     assert.strictEqual(attrObj.attr1, "value1");
     assert.strictEqual(attrObj.attr2, "value2");
   });
 
   var testNodeData = '<node attr1="value1" attr2="value2" data-custom1="datavalue1" data-custom2="datavalue2"></node>';
   it("should return object from data-attributes into object attached to attributes object", function () {
-    var $ = cheerio.load(testNodeData);
-    var attrObj = htmlComponents.processAttributes($("node").eq(0), $);
+    const { dom } = loadHTML(testNodeData);
+    const node = selectOne("node", dom);
+    var attrObj = htmlComponents.processAttributes(node, dom);
     assert.strictEqual(attrObj.data.custom1, "datavalue1");
     assert.strictEqual(attrObj.data.custom2, "datavalue2");
   });
@@ -57,9 +89,9 @@ describe("Attributes", function () {
   var testNodeAttrAsNodes =
     "<node><_attr1>value1</_attr1><_attr2>value2</_attr2><_data-custom1>datavalue1</_data-custom1><_data-custom2>datavalue2</_data-custom2></node>";
   it("should process nodes as attributes", function () {
-    var $ = cheerio.load(testNodeAttrAsNodes, { xml: { xmlMode: true }, decodeEntities: false }, false);
-    var node = $("node").eq(0);
-    var attrObj = htmlComponents.processNodesAsAttributes(node, $);
+    const { dom } = loadHTML(testNodeAttrAsNodes, { xmlMode: true });
+    const node = selectOne("node", dom);
+    var attrObj = htmlComponents.processNodesAsAttributes(node, dom);
     assert.strictEqual(attrObj.attr1, "value1");
     assert.strictEqual(attrObj.attr2, "value2");
     assert.strictEqual(attrObj["data-custom1"], "datavalue1");
@@ -69,9 +101,9 @@ describe("Attributes", function () {
   var testNodeDataAsAttributeProperties =
     "<node><_attr1>value1</_attr1><_attr2>value2</_attr2><_data-custom1>datavalue1</_data-custom1><_data-custom2>datavalue2</_data-custom2></node>";
   it("should process all nodes even data-nodes into attributes object", function () {
-    var $ = cheerio.load(testNodeDataAsAttributeProperties, { xml: { xmlMode: true }, decodeEntities: false }, false);
-    var node = $("node").eq(0);
-    var attrObj = htmlComponents.processAttributes(node, $);
+    const { dom } = loadHTML(testNodeDataAsAttributeProperties, { xmlMode: true });
+    const node = selectOne("node", dom);
+    var attrObj = htmlComponents.processAttributes(node, dom);
 
     assert.strictEqual(attrObj.attr1, "value1");
     assert.strictEqual(attrObj.attr2, "value2");
@@ -80,18 +112,19 @@ describe("Attributes", function () {
   });
 
   it("should remove all attributes nodes after processing nodes", function () {
-    var $ = cheerio.load(testNodeAttrAsNodes);
-    var node = $("node").eq(0);
-    htmlComponents.processNodesAsAttributes(node, $);
-    assert.strictEqual(node.children().length, 0);
+    const { dom } = loadHTML(testNodeAttrAsNodes);
+    const node = selectOne("node", dom);
+    htmlComponents.processNodesAsAttributes(node, dom);
+    const children = node.children ? node.children.filter((c) => c.type === "tag") : [];
+    assert.strictEqual(children.length, 0);
   });
 
   var testNodeWithHTML =
     "<node><_attr1>value1</_attr1><_attr2>value2</_attr2><_data-custom1>datavalue1</_data-custom1><_data-custom2>datavalue2</_data-custom2><label>This is label</label>\n<span>This is span</span> this is direct text</node>";
   it("should put property `html` with the html of the node without custom nodes", function () {
-    var $ = cheerio.load(testNodeWithHTML, { xml: { xmlMode: true }, decodeEntities: false }, false);
-    var node = $("node").eq(0);
-    var attr = htmlComponents.processAttributes(node, $);
+    const { dom } = loadHTML(testNodeWithHTML, { xmlMode: true });
+    const node = selectOne("node", dom);
+    var attr = htmlComponents.processAttributes(node, dom);
     assert.strictEqual(attr.html, "<label>This is label</label>\n<span>This is span</span> this is direct text");
   });
 
@@ -106,8 +139,9 @@ describe("Attributes", function () {
 
   it("should have the data object into attached string `dataStr`", function () {
     var testNodeData = '<node attr1="value1" data-custom1="datavalue1" data-custom2="datavalue2">hmtl content</node>';
-    var $ = cheerio.load(testNodeData, { xml: { xmlMode: true }, decodeEntities: false }, false);
-    var attrObj = htmlComponents.processAttributes($("node").eq(0), $);
+    const { dom } = loadHTML(testNodeData, { xmlMode: true });
+    const node = selectOne("node", dom);
+    var attrObj = htmlComponents.processAttributes(node, dom);
 
     assert.equal(attrObj.data.custom1, "datavalue1");
     assert.equal(attrObj.data.custom2, "datavalue2");
@@ -122,8 +156,9 @@ describe("Attributes", function () {
     htmlComp.initTags();
     var testNodeData =
       "<node><z-attr1>value1</z-attr1><z-attr2>value2</z-attr2><z-data-custom1>datavalue1</z-data-custom1><z-data-custom2>datavalue2</z-data-custom2></node>";
-    var $ = cheerio.load(testNodeData);
-    var attrObj = htmlComp.processAttributes($("node").eq(0), $);
+    const { dom } = loadHTML(testNodeData);
+    const node = selectOne("node", dom);
+    var attrObj = htmlComp.processAttributes(node, dom);
 
     assert.equal(attrObj.attr1, "value1");
     assert.equal(attrObj.attr2, "value2");
@@ -143,9 +178,9 @@ describe("Templating", function () {
   it("should replace node by it's generated HTML", function () {
     htmlComponents.initTags();
     var html = '<comp1 attr1="i am attr1"><_attr2>I am attr2</_attr2></comp1>';
-    var $ = cheerio.load(html, { xml: { xmlMode: true }, decodeEntities: false }, false);
-    var node = $("comp1").eq(0);
-    var newHTML = htmlComponents.processNode(node, $);
+    const { dom } = loadHTML(html, { xmlMode: true });
+    const node = selectOne("comp1", dom);
+    var newHTML = htmlComponents.processNode(node, dom);
     assert.strictEqual(newHTML, '<div class="comp1">\n' + "    <span>i am attr1</span>\n" + "    <span>I am attr2</span>\n" + "</div>");
   });
 
@@ -206,9 +241,9 @@ describe("Templating", function () {
   it("shoud be possible to process script tags", function () {
     htmlComponents.processFile("scripttest.html", "test/resources/htmlpages", ".tmp");
     var fileContent = fs.readFileSync(".tmp/scripttest.html", { encoding: "utf-8" });
-    var $ = cheerio.load(fileContent);
+    const { select } = loadHTML(fileContent);
 
-    assert(/<div class="comp1">/.test($("script").eq(0).text()), true);
+    assert(/<div class="comp1">/.test(select("script").text()), true);
   });
 
   it("Don't encode next scripts tags", function () {

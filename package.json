@@ -19,13 +19,18 @@
   ],
   "keywords": [
     "html-components",
-    "cheerio"
+    "htmlparser2",
+    "ast"
   ],
   "dependencies": {
-    "cheerio": "^0.22.0",
-    "glob": "^11.0.1",
+    "css-select": "^5.1.0",
+    "dom-serializer": "^2.0.0",
+    "domhandler": "^5.0.3",
+    "domutils": "^3.1.0",
+    "glob": "^11.0.3",
     "glob-all": "^3.3.1",
     "handlebars": "^4.7.8",
+    "htmlparser2": "^10.0.0",
     "lodash": "^4.17.21",
     "mkdirp": "^3.0.1"
   },
@@ -37,7 +42,7 @@
     "grunt-mocha-cli": "^7.0.0",
     "jshint-stylish": "^2.2.1",
     "load-grunt-tasks": "^5.1.0",
-    "mocha": "^11.1.0",
+    "mocha": "^11.7.4",
     "mustache": "^4.2.0",
     "time-grunt": "^2.0.0",
     "nth-check": "^2.1.1"

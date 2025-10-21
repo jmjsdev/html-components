@@ -360,6 +360,21 @@ describe("CDATA handling", function () {
     assert(newHTML.includes('without-cdata'), "Attribute value should be present");
     assert(!newHTML.includes("<comp1"), "Original component tag should not be present");
   });
+
+  it("Should process script tags with jQuery selectors", function () {
+    const html = `
+      <html>
+      <body>
+        <script type="text/html">#my-selector</script>
+      </body>
+      </html>
+    `;
+
+    const newHTML = htmlComponents.processHTML(html);
+
+    // jQuery selector should remain unchanged (no components to process)
+    assert(newHTML.includes('#my-selector'), "jQuery selector should be preserved");
+  });
 });
 
 describe("Cache management", function () {

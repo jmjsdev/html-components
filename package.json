@@ -64,10 +64,10 @@
       "node_modules/**"
     ],
     "check-coverage": true,
-    "lines": 95,
-    "statements": 95,
+    "lines": 100,
+    "statements": 99,
     "functions": 100,
-    "branches": 70
+    "branches": 80
   },
   "overrides": {}
 }

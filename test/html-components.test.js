@@ -44,7 +44,7 @@ function loadHTML(html, options = {}) {
 test("Tags", async (t) => {
   await t.test("should correctly list the tags in components folder", () => {
     htmlComponents.initTags();
-    assert.strictEqual(htmlComponents.tags.join(","), "comp1,customselect,layout,scripttest,tag");
+    assert.strictEqual(htmlComponents.tags.join(","), "comp1,customselect,emptycomp,layout,scripttest,tag");
   });
 
   await t.test("should get template from name", () => {
@@ -155,6 +155,32 @@ test("Attributes", async (t) => {
     assert.equal(attrObj.attr2, "value2");
     assert.equal(attrObj.data.custom1, "datavalue1");
     assert.equal(attrObj.data.custom2, "datavalue2");
+  });
+
+  await t.test("should handle node without attributes", () => {
+    const testNode = '<node>content</node>';
+    const { dom } = loadHTML(testNode);
+    const node = selectOne("node", dom);
+    const attrs = htmlComponents.getAttributes(node);
+    assert.deepEqual(attrs, {});
+  });
+
+  await t.test("should handle node without children", () => {
+    const testNode = '<node></node>';
+    const { dom } = loadHTML(testNode);
+    const node = selectOne("node", dom);
+    const html = htmlComponents.getInnerHTML(node);
+    assert.strictEqual(html, "");
+  });
+
+  await t.test("should get child elements correctly", () => {
+    const testNode = '<node><child1>text</child1>text content<child2>more</child2></node>';
+    const { dom } = loadHTML(testNode);
+    const node = selectOne("node", dom);
+    const children = htmlComponents.getChildElements(node);
+    assert.strictEqual(children.length, 2);
+    assert.strictEqual(children[0].name, "child1");
+    assert.strictEqual(children[1].name, "child2");
   });
 });
 
@@ -277,6 +303,18 @@ test("Templating", async (t) => {
     const fileToTest = fs.readFileSync("test/resources/resultCompare/pageWithLayout.html", { encoding: "utf-8" });
     assert.equal(fileContent, fileToTest);
   });
+
+  await t.test("should process node without children correctly", () => {
+    const html = '<comp1></comp1>';
+    const newHTML = htmlComponents.processHTML(html);
+    assert(newHTML.includes('<div class="comp1">'), "Component should be processed even when empty");
+  });
+
+  await t.test("should handle self-closing tags", () => {
+    const html = '<div><comp1/></div>';
+    const newHTML = htmlComponents.processHTML(html);
+    assert(newHTML.includes('<div class="comp1">'), "Self-closing component should be processed");
+  });
 });
 
 // Render correctly without modification tests
@@ -344,6 +382,24 @@ test("CDATA handling", async (t) => {
     assert(!newHTML.includes("<comp1"), "Original component tag should not be present");
   });
 
+  await t.test("Should handle multiple components in script tags", () => {
+    const html = `
+      <html>
+      <body>
+        <script type="text/html">
+          <comp1 attr1="first"></comp1>
+          <comp1 attr1="second"></comp1>
+        </script>
+      </body>
+      </html>
+    `;
+
+    const newHTML = htmlComponents.processHTML(html);
+
+    assert(newHTML.includes('<div class="comp1">'), "Component should be processed");
+    assert(!newHTML.includes("<comp1"), "Original component tag should not be present");
+  });
+
   await t.test("Should process non-CDATA script tags with text/html type", () => {
     const html = `
       <html>
@@ -375,6 +431,49 @@ test("CDATA handling", async (t) => {
 
     assert(newHTML.includes('#my-selector'), "jQuery selector should be preserved");
   });
+
+  await t.test("Should not process script tags without HTML content", () => {
+    const html = `
+      <html>
+      <body>
+        <script type="text/html">just plain text without html</script>
+      </body>
+      </html>
+    `;
+
+    const newHTML = htmlComponents.processHTML(html);
+
+    assert(newHTML.includes('just plain text without html'), "Text should be preserved");
+    assert(!newHTML.includes('<comp1'), "No component processing should occur");
+  });
+
+  await t.test("Should handle empty script tags with text/html type", () => {
+    const html = `
+      <html>
+      <body>
+        <script type="text/html"></script>
+      </body>
+      </html>
+    `;
+
+    const newHTML = htmlComponents.processHTML(html);
+
+    assert(newHTML.includes('<script type="text/html"></script>'), "Empty script should be preserved");
+  });
+
+  await t.test("Should handle script tag with only whitespace", () => {
+    const html = `
+      <html>
+      <body>
+        <script type="text/template">   </script>
+      </body>
+      </html>
+    `;
+
+    const newHTML = htmlComponents.processHTML(html);
+
+    assert(newHTML.includes('<script type="text/template">'), "Script should be preserved");
+  });
 });
 
 // Cache management tests
@@ -396,5 +495,160 @@ test("Cache management", async (t) => {
     assert.strictEqual(result, htmlComponents, "resetCache should return this");
 
     htmlComponents.getTemplate("comp1");
+  });
+});
+
+// Edge cases tests
+test("Edge cases", async (t) => {
+  await t.test("should handle objectToAttributeString with empty object", () => {
+    const str = htmlComponents.objectToAttributeString("data-", {});
+    assert.strictEqual(str, "");
+  });
+
+  await t.test("should handle getChildElements with node without children property", () => {
+    const testNode = { type: "tag", name: "test" };
+    const children = htmlComponents.getChildElements(testNode);
+    assert.deepEqual(children, []);
+  });
+
+  await t.test("should handle script tag with text/template type", () => {
+    const html = `
+      <html>
+      <body>
+        <script type="text/template">
+          <comp1 attr1="in-template"></comp1>
+        </script>
+      </body>
+      </html>
+    `;
+
+    const newHTML = htmlComponents.processHTML(html);
+
+    assert(newHTML.includes('<div class="comp1">'), "Component should be processed in text/template");
+    assert(!newHTML.includes("<comp1"), "Original component tag should not be present");
+  });
+
+  await t.test("should process deeply nested components", () => {
+    const html = '<comp1><comp1><comp1></comp1></comp1></comp1>';
+    const newHTML = htmlComponents.processHTML(html);
+    assert(newHTML.includes('<div class="comp1">'), "Nested components should be processed");
+  });
+
+  await t.test("should handle attributes without data prefix", () => {
+    const testNode = '<node attr1="value1" attr2="value2" normalAttr="test"></node>';
+    const { dom } = loadHTML(testNode);
+    const node = selectOne("node", dom);
+    const attrs = htmlComponents.fixAttributesObject(htmlComponents.getAttributes(node));
+    assert.strictEqual(attrs.attr1, "value1");
+    assert.strictEqual(attrs.attr2, "value2");
+    assert.strictEqual(attrs.normalAttr, "test");
+    assert.strictEqual(attrs.dataStr, undefined);
+  });
+
+  await t.test("should process script with both tag and text children", () => {
+    const html = `
+      <html>
+      <body>
+        <script type="text/html">text before<comp1></comp1>text after</script>
+      </body>
+      </html>
+    `;
+    const newHTML = htmlComponents.processHTML(html);
+    assert(newHTML.includes('<div class="comp1">'), "Component in mixed content should be processed");
+  });
+
+  await t.test("should handle component without any attributes or children", () => {
+    const { dom } = loadHTML('<comp1/>', { xmlMode: true });
+    const node = selectOne("comp1", dom);
+    const context = htmlComponents.processAttributes(node, dom);
+    assert(context !== null, "Context should not be null");
+    assert(typeof context === 'object', "Context should be an object");
+  });
+
+  await t.test("should handle component that returns empty string", () => {
+    // Force re-init to pick up new template
+    htmlComponents.tags = null;
+    htmlComponents.initTags();
+
+    const html = '<emptycomp></emptycomp>';
+    const newHTML = htmlComponents.processHTML(html);
+    // Empty template should result in empty output
+    assert(!newHTML.includes('<emptycomp'), "Component tag should be processed");
+  });
+
+  await t.test("should handle component with special characters in attribute value", () => {
+    const html = '<comp1 attr1="test&amp;value"></comp1>';
+    const newHTML = htmlComponents.processHTML(html);
+    assert(newHTML.includes('test&'), "Special characters should be handled");
+  });
+
+  await t.test("should handle script tag with empty CDATA", () => {
+    const html = `
+      <html>
+      <body>
+        <script type="text/html"><![CDATA[]]></script>
+      </body>
+      </html>
+    `;
+    const newHTML = htmlComponents.processHTML(html);
+    assert(newHTML.includes('<script'), "Script tag should be preserved");
+  });
+
+  await t.test("should handle script tag with CDATA containing only text", () => {
+    const html = `
+      <html>
+      <body>
+        <script type="text/html"><![CDATA[plain text only]]></script>
+      </body>
+      </html>
+    `;
+    const newHTML = htmlComponents.processHTML(html);
+    assert(newHTML.includes('plain text only'), "Text content should be preserved");
+  });
+
+  await t.test("should handle node with only text children (no tags)", () => {
+    const testNode = '<node>just text content</node>';
+    const { dom } = loadHTML(testNode);
+    const node = selectOne("node", dom);
+    const children = htmlComponents.getChildElements(node);
+    assert.strictEqual(children.length, 0, "Should have no tag children");
+  });
+
+  await t.test("should process attributes with mixed data and non-data attributes", () => {
+    const testNode = '<node data-id="123" class="test" data-value="abc" id="mynode"></node>';
+    const { dom } = loadHTML(testNode);
+    const node = selectOne("node", dom);
+    const attrs = htmlComponents.fixAttributesObject(htmlComponents.getAttributes(node));
+    assert.strictEqual(attrs.data.id, "123");
+    assert.strictEqual(attrs.data.value, "abc");
+    assert.strictEqual(attrs.class, "test");
+    assert.strictEqual(attrs.id, "mynode");
+    assert(attrs.dataStr.includes('data-id="123"'), "dataStr should contain data attributes");
+  });
+
+  await t.test("should handle script tag that is empty with type text/html", () => {
+    const html = '<html><body><script type="text/html"></script></body></html>';
+    const newHTML = htmlComponents.processHTML(html);
+    assert(newHTML.includes('<script type="text/html">'), "Empty script should remain");
+  });
+
+  await t.test("should handle multiple nested script tags with components", () => {
+    const html = `
+      <div>
+        <script type="text/html"><comp1></comp1></script>
+        <script type="text/template"><comp1></comp1></script>
+      </div>
+    `;
+    const newHTML = htmlComponents.processHTML(html);
+    assert(!newHTML.includes('<comp1'), "All components should be processed");
+  });
+
+  await t.test("should handle processNodesAsAttributes with node without name", () => {
+    const testNode = '<node><_attr1>value</_attr1><span>content</span></node>';
+    const { dom } = loadHTML(testNode, { xmlMode: true });
+    const node = selectOne("node", dom);
+    const attrs = htmlComponents.processNodesAsAttributes(node, dom);
+    assert.strictEqual(attrs.attr1, "value");
+    assert(attrs.html.includes('content'), "Non-attribute node should remain in html");
   });
 });

@@ -1,6 +1,6 @@
 {
   "name": "html-components",
-  "version": "0.5.0",
+  "version": "1.0.0",
   "main": "lib/html-components.js",
   "description": "Create html components from templates with a simple way",
   "homepage": "https://github.com/arnogues/html-components",
